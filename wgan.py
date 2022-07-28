@@ -20,8 +20,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # hyperparameters
 parser = argparse.ArgumentParser()
-parser.add_argument("--n_epochs", type=int, default=200, help="number of epochs of training")
-parser.add_argument("--batch_size", type=int, default=1, help="size of the batches")
+parser.add_argument("--n_epochs", type=int, default=150, help="number of epochs of training")
+parser.add_argument("--batch_size", type=int, default=2, help="size of the batches")
 parser.add_argument("--lr", type=float, default=0.0002, help="RMSProp: learning rate")
 parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality of the latent space")
 parser.add_argument("--img_size", type=int, default=256, help="size of each image dimension")
@@ -39,7 +39,6 @@ for path in img_path:
     img_low_high = img_mat.get('imdb')
     low.append(img_low_high[0][0][0])
     high.append(img_low_high[0][0][1])
-
 class AAPM(Dataset):
     def __init__(self, transform = None):
         self.class_len = len(low)
@@ -68,11 +67,6 @@ transform = transforms.Compose([
 
 dataset = AAPM(transform = transform)
 dataloader = DataLoader(dataset=dataset, batch_size = opt.batch_size, shuffle=True, num_workers = 1, drop_last = True)
-
-# test
-# images, labels = next(iter(dataloader))
-# print(images.shape)
-# print(images[0])
 
 
 class Generator(nn.Module):
@@ -170,12 +164,12 @@ for epoch in range(opt.n_epochs):
     start_time = time()
     for i, (image, label) in enumerate(dataloader):
         real_image = image.to(device)
-        z = torch.randn((1, opt.latent_dim)).to(device)
+        z = torch.randn((opt.batch_size, opt.latent_dim)).to(device)
         fake_image = generator(z)
         # train critic
         cri_optimizer.zero_grad()
-        real_output = critic(real_image)
-        fake_output = critic(fake_image)
+        real_output = torch.sum(critic(real_image))
+        fake_output = torch.sum(critic(fake_image))
         loss_c = (-real_output + fake_output)/opt.batch_size
         loss_c.backward()
         cri_optimizer.step()
@@ -184,11 +178,11 @@ for epoch in range(opt.n_epochs):
         
         # train generator
         if i%opt.n_critic:
-            z = torch.rand((1, opt.latent_dim)).to(device)
-            loss_g = -critic(generator(z))/opt.batch_size
+            z = torch.rand((opt.batch_size, opt.latent_dim)).to(device)
+            loss_g = -torch.sum(critic(generator(z)))/opt.batch_size
             loss_g.backward()
             gen_optimizer.step()
-        if i%10 == 0:
+        if i%100 == 0:
             print(i)
 
     result_save_dir = f"./result"
@@ -199,7 +193,7 @@ for epoch in range(opt.n_epochs):
         real_image = real_image.view(256,256)
         save_image(fake_image, "./fake.png")
         save_image(real_image, "./real.png")
-    if (epoch+1) % 10 == 0:
+    if (epoch+1) % 100 == 0:
         fake_image = fake_image.view(256,256)
         save_image(fake_image, os.path.join(result_save_dir, f"{epoch}.png"))
     t = time()-start_time
