@@ -21,10 +21,10 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # hyperparameters
 parser = argparse.ArgumentParser()
 parser.add_argument("--n_epochs", type=int, default=150, help="number of epochs of training")
-parser.add_argument("--batch_size", type=int, default=2, help="size of the batches")
+parser.add_argument("--batch_size", type=int, default=16, help="size of the batches")
 parser.add_argument("--lr", type=float, default=0.0002, help="RMSProp: learning rate")
 parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality of the latent space")
-parser.add_argument("--img_size", type=int, default=256, help="size of each image dimension")
+parser.add_argument("--img_size", type=int, default=128, help="size of each image dimension")
 parser.add_argument("--clipping_param", type=float, default = 0.01, help="extent of clipping")
 parser.add_argument("--n_critic", type=int, default=5, help="number of iterations of the critic per generator iteration")
 opt = parser.parse_args()
@@ -39,6 +39,7 @@ for path in img_path:
     img_low_high = img_mat.get('imdb')
     low.append(img_low_high[0][0][0])
     high.append(img_low_high[0][0][1])
+
 class AAPM(Dataset):
     def __init__(self, transform = None):
         self.class_len = len(low)
@@ -66,41 +67,36 @@ transform = transforms.Compose([
 ])
 
 dataset = AAPM(transform = transform)
-dataloader = DataLoader(dataset=dataset, batch_size = opt.batch_size, shuffle=True, num_workers = 1, drop_last = True)
-
+dataloader = DataLoader(dataset=dataset, batch_size = opt.batch_size, shuffle=True, drop_last = True)
+print(len(dataloader))
 
 class Generator(nn.Module):
     def __init__(self):
         super().__init__()
         self.fc = nn.Linear(opt.latent_dim, 1024)
         self.conv1= nn.Sequential(
-            nn.ConvTranspose2d(1024, 512, 8, 1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(inplace = True)
-        )
-        self.conv2 = nn.Sequential(
-            nn.ConvTranspose2d(512, 256, 4, 2, 1),
+            nn.ConvTranspose2d(1024, 256, 8, 1),
             nn.BatchNorm2d(256),
             nn.ReLU(inplace = True)
         )
-        self.conv3 = nn.Sequential(
+        self.conv2 = nn.Sequential(
             nn.ConvTranspose2d(256, 128, 4, 2, 1),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace = True)
         )
-        self.conv4 = nn.Sequential(
+        self.conv3 = nn.Sequential(
             nn.ConvTranspose2d(128, 64, 4, 2, 1),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace = True)
         )
-        self.conv5 = nn.Sequential(
+        self.conv4 = nn.Sequential(
             nn.ConvTranspose2d(64, 32, 4, 2, 1),
             nn.BatchNorm2d(32),
             nn.ReLU(inplace = True)
         )
-        self.conv6 = nn.Sequential(
+        self.conv5 = nn.Sequential(
             nn.ConvTranspose2d(32, 1, 4, 2, 1),
-            nn.Tanh()
+            nn.Sigmoid()
         )
 
     def forward(self, z):
@@ -111,7 +107,6 @@ class Generator(nn.Module):
         output = self.conv3(output)
         output = self.conv4(output)
         output = self.conv5(output)
-        output = self.conv6(output)
         return output
 
 class Critic(nn.Module):
@@ -137,12 +132,7 @@ class Critic(nn.Module):
             nn.LeakyReLU(inplace = True)
         )
         self.conv5 = nn.Sequential(
-            nn.Conv2d(256, 512, 4, 2, 1),
-            nn.BatchNorm2d(512),
-            nn.LeakyReLU(inplace = True)
-        )
-        self.conv6 = nn.Sequential(
-            nn.Conv2d(512, 1, 8, 1, 0)
+            nn.Conv2d(256, 1, 4, 1, 0),
         )
 
     def forward(self, z):
@@ -151,7 +141,6 @@ class Critic(nn.Module):
         output = self.conv3(output)
         output = self.conv4(output)
         output = self.conv5(output)
-        output = self.conv6(output)
         return output.squeeze()
 
 generator = Generator().to(device)
@@ -165,7 +154,7 @@ for epoch in range(opt.n_epochs):
     for i, (image, label) in enumerate(dataloader):
         real_image = image.to(device)
         z = torch.randn((opt.batch_size, opt.latent_dim)).to(device)
-        fake_image = generator(z)
+        fake_image = generator(z).detach()
         # train critic
         cri_optimizer.zero_grad()
         real_output = torch.sum(critic(real_image))
@@ -189,13 +178,13 @@ for epoch in range(opt.n_epochs):
     if not os.path.exists(result_save_dir):
         os.makedirs(result_save_dir)
     if epoch == 0:
-        fake_image = fake_image.view(256,256)
-        real_image = real_image.view(256,256)
-        save_image(fake_image, "./fake.png")
-        save_image(real_image, "./real.png")
-    if (epoch+1) % 100 == 0:
-        fake_image = fake_image.view(256,256)
-        save_image(fake_image, os.path.join(result_save_dir, f"{epoch}.png"))
+        fake_image = fake_image.view(opt.batch_size, 1, 128,128)
+        real_image = real_image.view(opt.batch_size, 1, 128,128)
+        save_image(fake_image, "./fake.png", nrow=4)
+        save_image(real_image, "./real.png", nrow=4)
+    if (epoch+1) % 2 == 0:
+        fake_image = fake_image.view(opt.batch_size, 1, 128,128)
+        save_image(fake_image, os.path.join(result_save_dir, f"{epoch}.png"), nrow=4)
     t = time()-start_time
     print(f'Epoch {epoch}/{opt.n_epochs} || discriminator loss={loss_c:.4f}  || generator loss={loss_g:.4f} || time {t:.3f}')
     summary.add_scalar("cri", loss_c, epoch)
