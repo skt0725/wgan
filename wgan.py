@@ -21,7 +21,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # hyperparameters
 parser = argparse.ArgumentParser()
 parser.add_argument("--n_epochs", type=int, default=150, help="number of epochs of training")
-parser.add_argument("--batch_size", type=int, default=16, help="size of the batches")
+parser.add_argument("--batch_size", type=int, default=12, help="size of the batches")
 parser.add_argument("--lr", type=float, default=0.0002, help="RMSProp: learning rate")
 parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality of the latent space")
 parser.add_argument("--img_size", type=int, default=128, help="size of each image dimension")
@@ -68,7 +68,6 @@ transform = transforms.Compose([
 
 dataset = AAPM(transform = transform)
 dataloader = DataLoader(dataset=dataset, batch_size = opt.batch_size, shuffle=True, drop_last = True)
-print(len(dataloader))
 
 class Generator(nn.Module):
     def __init__(self):
@@ -167,6 +166,7 @@ for epoch in range(opt.n_epochs):
         
         # train generator
         if i%opt.n_critic:
+            gen_optimizer.zero_grad()
             z = torch.rand((opt.batch_size, opt.latent_dim)).to(device)
             loss_g = -torch.sum(critic(generator(z)))/opt.batch_size
             loss_g.backward()
