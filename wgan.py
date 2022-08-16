@@ -178,12 +178,12 @@ for epoch in range(opt.n_epochs):
     if not os.path.exists(result_save_dir):
         os.makedirs(result_save_dir)
     if epoch == 0:
-        fake_image = fake_image.view(opt.batch_size, 1, 128,128)
-        real_image = real_image.view(opt.batch_size, 1, 128,128)
+        fake_image = fake_image.view(opt.batch_size, 1, opt.img_size,opt.img_size
+        real_image = real_image.view(opt.batch_size, 1, opt.img_size,opt.img_size)
         save_image(fake_image, "./fake.png", nrow=4)
         save_image(real_image, "./real.png", nrow=4)
     if (epoch+1) % 2 == 0:
-        fake_image = fake_image.view(opt.batch_size, 1, 128,128)
+        fake_image = fake_image.view(opt.batch_size, 1, opt.img_size,opt.img_size)
         save_image(fake_image, os.path.join(result_save_dir, f"{epoch}.png"), nrow=4)
     t = time()-start_time
     print(f'Epoch {epoch}/{opt.n_epochs} || discriminator loss={loss_c:.4f}  || generator loss={loss_g:.4f} || time {t:.3f}')
